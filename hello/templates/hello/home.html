@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            color: #333;
+        }
+        header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+        }
+        .menu {
+            padding: 10px 20px;
+            background-color: #f0f0f0;
+            text-align: center;
+        }
+        .menu a {
+            text-decoration: none;
+            margin: 0 10px;
+            color: black;
+            font-weight: bold;
+        }
+        .menu a:hover {
+            color: blue;
+        }
+        .content {
+            display: flex;
+            flex: 1;
+            padding: 20px;
+        }
+        .left {
+            width: 30%;
+            background-color: #f9f9f9;
+            padding: 20px;
+        }
+        .right {
+            width: 70%;
+            background-color: #fff;
+            padding: 20px;
+        }
+        footer {
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 10px 20px;
+            width: 100%;
+        }
+    </style>
+
+
+</head>
+
+<body>
+    <header>
+        <h1>Welcome to Our Home Page</h1>
+    </header>
+    <div class="menu">
+        <a href="/">Home</a>
+        <a href="/about">About</a>
+        <a href="/services">Services</a>
+        <a href="/contact">Contact</a>
+    </div>
+    <div class="content">
+        <div class="left">
+            <h2>Enter the details</h2>
+          
+                {% csrf_token %}
+                <p>
+                    <label for="topic">Name Suggest the Topic:</label><br>
+                    <input type="text" id="" name="topic" placeholder="Enter topic name" required>
+                </p>
+                <p>
+                    <label for="description">More Description:</label><br>
+                    <textarea id="description" name="description" placeholder="Enter more details" required></textarea>
+                </p>
+                <p>
+                    <button id="loadPoemButton">Generative AI Call</button>
+                </p>
+           
+        </div>
+        
+        <div class="right" id="poemArea">
+            <h2>FInd the information below</h2>
+           <p id="poemContent"></p>
+           <button onclick="generatePDF1()">Download as PDF</button>
+           <button onclick="copyToClipboard()">Copy to Clipboard</button>
+        </div>
+    </div>
+    <footer>
+        <p>Copyright © 2024  All Rights Reserved</p>
+    </footer>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.3.1/jspdf.umd.min.js"></script>
+    <!-- Include the jsPDF Autotable plugin: -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.3.2/html2canvas.min.js"></script>
+    
+
+<!-- Inside the <head> or directly before script -->
+    <script>
+        var csrftoken = '{{ csrf_token }}';
+        
+        $.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+                    xhr.setRequestHeader("X-CSRFToken", csrftoken);
+                }
+            }
+        });
+        </script>
+        
+
+    <script>
+
+        $(document).ready(function() {
+            $('#loadPoemButton').click(function() { 
+            var topic = $('#topic').val(); // Get the value of the topic input field
+            var description = $('#description').val(); // Get the value of the description input field
+                               
+                $.ajax({
+                    url: '{% url "get_poem" %}',  // Ensure the URL matches the name in your urls.py
+                  // url:'http://127.0.0.1:5000/get_poem', 
+                   type: 'GET',
+                   data: {
+                        topic: topic,
+                        description: description
+                            },
+                    dataType: 'json',
+                    success: function(data) {                                                                            
+                        if (data.poem) {
+                            $('#poemContent').html(convertToHtml(data.poem));            
+                        } else {
+                            $('#poemContent').html('Failed to load poem: ' + data.error);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $('#poemContent').text('An error occurred: ' + error);
+                    }
+                });
+            });
+        });
+
+        function convertToHtml(poem) {
+            var htmlContent = poem.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            return '<p>' + htmlContent + '</p>';
+        }
+      
+        function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            // Get the text from the element to include in the PDF
+            const content = document.getElementById('poemContent').html();
+
+            doc.text(content, 10, 10);
+            doc.save('poem.pdf');
+        }
+        
+        function generatePDF1() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // Get the text from the element to include in the PDF
+    const contentElement = document.getElementById('poemContent');
+    const content = contentElement.innerText;
+
+    // Specify the width for text wrapping (e.g., 180 mm for A4 width with margins)
+    const textWidth = 180;
+    const margin = 10;
+
+    // Use splitTextToSize to handle text wrapping
+    var splitText = doc.splitTextToSize(content, textWidth);
+
+    // Add text to document
+    doc.text(splitText, margin, margin);
+
+    // Save the PDF
+    doc.save('outputai.pdf');
+}
+
+
+function copyToClipboard1() {
+            // Get the text you want to copy
+            const textToCopy = document.getElementById('poemContent').innerHTML;
+            // Use the Navigator Clipboard API to copy text
+            navigator.clipboard.writeText(textToCopy)
+                .then(() => {
+                    // Success message
+                    console.log('Text copied successfully!');
+                    alert('Text copied successfully!');
+                })
+                .catch(err => {
+                    // Error handling
+                    console.error('Failed to copy text: ', err);
+                    alert('Failed to copy text!');
+                });
+        }
+
+        function copyToClipboard2() {
+    const htmlToCopy = document.getElementById('poemContent').innerHTML;
+
+    // Create a temporary textarea element to hold HTML
+    const textarea = document.createElement('textarea');
+    textarea.style.position = 'fixed';  // Avoid scrolling to bottom
+    textarea.style.opacity = '0';
+    textarea.value = htmlToCopy;
+
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+
+    try {
+        const successful = document.execCommand('copy');
+        const msg = successful ? 'successful' : 'unsuccessful';
+        console.log('Copying text command was ' + msg);
+        alert('HTML was copied');
+    } catch (err) {
+        console.error('Oops, unable to copy', err);
+        alert('Failed to copy HTML!');
+    }
+
+    document.body.removeChild(textarea);
+}
+
+function copyToClipboard() {
+    const htmlToCopy = document.getElementById('poemContent').innerHTML;
+
+    // Create a temporary element and set its content to the HTML
+    const el = document.createElement('div');
+    el.innerHTML = htmlToCopy;
+    el.style.position = 'absolute';
+    el.style.left = '-9999px';
+    document.body.appendChild(el);
+
+    // Use the Selection and Range APIs to select the text
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    // Copy the selection to the clipboard
+    try {
+        const successful = document.execCommand('copy');
+        const msg = successful ? 'successful' : 'unsuccessful';
+        console.log('Copying text command was ' + msg);
+        alert('HTML was copied');
+    } catch (err) {
+        console.error('Oops, unable to copy', err);
+        alert('Failed to copy HTML!');
+    }
+
+    // Cleanup
+    document.body.removeChild(el);
+    selection.removeAllRanges();
+}
+
+
+
+
+        </script>
+        
+
+</body>
+</html>
