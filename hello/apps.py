@@ -1,0 +1,10 @@
+from django.apps import AppConfig
+
+
+class HelloConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'hello'
+
+
+def ready(self):
+    import hello.signals  # Ensure signals are imported when the app is ready

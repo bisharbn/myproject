@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h2 class="mt-4">🎵 Saved Audio Files</h2>
+  {% if audios %}
+    <ul class="list-group mt-3">
+      {% for audio in audios %}
+        <li class="list-group-item">
+          <p class="mb-1"><strong>{{ audio.filename }}</strong></p>
+          <p class="text-muted">{{ audio.text|truncatechars:200 }}</p>
+          <audio controls>
+            <source src="/media/audio/{{ audio.filename }}" type="audio/mpeg">
+          </audio>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="text-muted mt-3">No audio files saved yet.</p>
+  {% endif %}
+{% endblock %}

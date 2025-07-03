@@ -1,0 +1,9 @@
+<form method="POST" id="ttsForm">
+  {% csrf_token %}
+  <span id="voiceBadge" class="badge bg-secondary mb-3"> 🎤 {{ selected_voice }}</span>
+  <!-- Your textarea, buttons, etc. -->
+</form>
+
+{% if audio_list %}
+  <!-- Show audio_list -->
+{% endif %}

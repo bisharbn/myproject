@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hl7 Parser</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            color: #333;
+        }
+        header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+        }
+        .menu {
+            padding: 10px 20px;
+            background-color: #f0f0f0;
+            text-align: center;
+        }
+        .menu a {
+            text-decoration: none;
+            margin: 0 10px;
+            color: black;
+            font-weight: bold;
+        }
+        .menu a:hover {
+            color: blue;
+        }
+        .content {
+            display: flex;
+            flex: 1;
+            padding: 20px;
+        }
+        .left {
+            width: 10%;
+            background-color: #f9f9f9;
+            padding: 20px;
+        }
+        .right {
+            width: 90%;
+            background-color: #fff;
+            padding: 20px;
+        }
+        footer {
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 10px 20px;
+            width: 100%;
+        }
+        table.dataTable { font-size: 9px; }
+    </style>
+
+</head>
+<body>
+    <header>
+        <h1>Hl7 Parser</h1>
+    </header>
+    <div class="menu">
+        <a href="/">Home</a>
+        <a href="/about">About</a>
+        <a href="/services">Services</a>
+        <a href="/contact">Contact</a>
+        <a href="/HL7Parser">HL7 Parser</a>
+        <a href="/Outlook">Outlook</a>
+    </div>       
+
+    <div class="content">
+        <div class="left">
+            </div>
+
+    <div class="right" id="hl7area">
+                {% csrf_token %}
+               
+                <p>
+                    <label for="description">Paste  HL7 Message :</label><br>
+                    <textarea id="description" name="description" placeholder="Paste the HL7 message"  rows="10" cols="100" required></textarea>
+                </p>
+                <p>
+                    <button id="btnHL7Parser">Parse the message </button>
+                </p>
+                <p id="Hl7Content"></p>
+                <table id="dtcontent" class="display" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>MsgContID</th>
+                            <th>Order Code</th>
+                            <th>Order Name</th>
+                            <th>Order_datetime</th>
+                            <th>Order Id</th>
+                            <th>Placerid</th>
+                            <th>Fin Num</th>
+                            <th>Result Code</th>
+                            <th>DTA</th>
+                            <th>Result Value</th>
+                            <th>Unit</th>
+                            <th>Abnormal Flag</th>
+                            <th>Reference Range</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Table data will be inserted here -->
+                    </tbody>
+                </table>
+           </div>   
+
+           </div>   
+
+           <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+           <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.3.1/jspdf.umd.min.js"></script>
+           <!-- Include the jsPDF Autotable plugin: -->
+           <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>    
+           <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.3.2/html2canvas.min.js"></script>
+           <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.css">
+           <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.css">
+           <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/1.7.1/css/buttons.dataTables.min.css">
+           <script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-3.5.1.js"></script>
+           <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.js"></script>
+           <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/1.7.1/js/dataTables.buttons.min.js"></script>
+           <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/1.7.1/js/buttons.flash.min.js"></script>
+           <script type="text/javascript" charset="utf8" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+           <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/1.7.1/js/buttons.html5.min.js"></script>
+           <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/buttons/1.7.1/js/buttons.print.min.js"></script>
+
+           <script>            
+                $(document).ready(function() {   
+                                                 
+                    $('#btnHL7Parser').click(function() {                             
+                    var description = $('#description').val(); // Get the value of the description input field                                   
+                    $('#Hl7Content').html('Parsing Hl7 message...');
+                        $.ajax({
+                            url: '{% url "Hl7Parserfun" %}',  // Ensure the URL matches the name in your urls.py
+                        type: 'GET',
+                        data: {                          
+                                description: description
+                                    },
+                            dataType: 'json',
+                            success: function(data) {                                             
+                                if (data.data) {
+                                   // $('#Hl7Content').html(JSON.stringify(data.data));            
+            // Initialize DataTable with buttons
+                                    if ($.fn.dataTable.isDataTable('#dtcontent')) {
+                            var table= $('#dtcontent').DataTable();
+                            table.clear().draw();  // Clear existing data
+                            table.clear().rows.add(data.data).draw();
+                            // Modify the table using the API
+                        } else {
+                $('#dtcontent').DataTable({                               
+                data: data.data,
+                columns: [
+                    { data: "MsgContID" },
+                    { data: "Order Code" },
+                    { data: "Order Name" },
+                    { data: "Order_datetime" },
+                    { data: "Order Id" },
+                    { data: "Placerid" },
+                    { data: "Fin Num" },
+                    { data: "Result Code" },
+                    { data: "DTA" },
+                    { data: "Result Value" },
+                    { data: "Unit" },
+                    { data: "Abnormal Flag" },
+                    { data: "Reference Range" }
+                ],
+                dom: 'Bfrtip',  // This line is important for enabling the buttons
+                buttons: [
+                    'copy', 'csv', 'excel', 'pdf', 'print'
+                ]
+            });
+        }
+      
+                                } else {
+                                    $('#Hl7Content').html('Failed to load Hl7 Message: ' + data.error);
+                                }
+                            },
+                            error: function(xhr, status, error) {
+                                $('#poemContent').text('An error occurred: ' + error);
+                            }
+                        });
+                    });
+                });
+
+        </script>
+
+</body>
+</html>

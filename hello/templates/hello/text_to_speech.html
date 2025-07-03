@@ -1,0 +1,937 @@
+{% extends "hello/base.html" %}
+{% load custom_filters %}
+
+{% block title %}Best Audio AI Lab {% endblock %}
+
+
+{% block left_sidebar %}
+  <h5>🎛 Audio Platform</h5>
+  <hr />
+  <strong>Playground</strong>
+  <ul class="nav flex-column mb-3">
+    <li class="nav-item"><a href="#" class="nav-link py-1 active" onclick="loadContent('/tts/')">Text to Speech</a></li>
+    <li class="nav-item"><a href="#" class="nav-link py-1" onclick="loadContent('/vc/')">Voice Changer</a></li>
+    <!-- <li class="nav-item py0"><a href="#" class="nav-link">Sound Effects</a></li>
+    <li class="nav-item py0"><a href="#" class="nav-link">Voice Isolator</a></li> -->
+  </ul>
+  <!-- <strong>Products</strong>
+  <ul class="nav flex-column">
+    <li class="nav-item"><a href="#" class="nav-link">Studio</a></li>
+    <li class="nav-item"><a href="#" class="nav-link">Dubbing</a></li>
+    <li class="nav-item"><a href="#" class="nav-link">Speech to Text</a></li>
+  </ul> -->
+
+  <form method="post" class="mb-3">
+  {% csrf_token %}
+  <input type="hidden" name="new_page" value="1">
+  <button type="submit" class="btn btn-sm btn-outline-success w-100">➕ New Page</button>
+</form>
+
+<!-- Audio Pages List -->
+<strong class="mt-3 d-block">Your Pages</strong>
+<ul class="nav flex-column small" id="pageList">
+  {% for page in pages %}
+    {% if page.user == request.user %}
+    <li class="nav-item mb-1 page-item" data-page-id="{{ page.id }}">
+      <div class="d-flex justify-content-between align-items-center">
+        {% if page.id == selected_page_id %}
+          <div class="d-flex align-items-center flex-grow-1">
+            <span class="me-2">📄</span>
+            <span class="page-name flex-grow-1" id="pageName_{{ page.id }}">{{ page.name }}</span>
+          </div>
+          <div class="page-actions d-flex gap-1">
+            <button class="btn btn-sm btn-outline-secondary btn-edit" data-id="{{ page.id }}">✏️</button>
+            <button class="btn btn-sm btn-outline-danger btn-delete" data-id="{{ page.id }}">🗑️</button>
+          </div>
+          <form method="post" action="{% url 'rename_page' %}" class="rename-form d-none mt-1 w-100" id="renameForm_{{ page.id }}">
+            {% csrf_token %}
+            <input type="hidden" name="page_id" value="{{ page.id }}">
+            <div class="input-group input-group-sm mt-1">
+              <input type="text" name="new_name" class="form-control" value="{{ page.name }}">
+              <button type="submit" class="btn btn-outline-primary">💾</button>
+            </div>
+          </form>
+        {% else %}
+          <a href="?page={{ page.id }}" class="nav-link small d-flex align-items-center">
+            <span class="me-2">📄</span>{{ page.name }}
+          </a>
+        {% endif %}
+      </div>
+    </li>
+    {% endif %}
+  {% endfor %}
+</ul>
+
+{% endblock %}
+
+{% block right_sidebar %}
+<div class="mb-3">
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="page_id" value="{{ selected_page_id }}">
+
+    <!-- Language / Voice Dropdown -->
+    <label class="form-label">Language & Voice</label>
+
+<select class="form-select" name="voice" form="ttsForm" id="voice"  {% if not is_authenticated %}disabled{% endif %}>
+  {% for gender in gender_groups %}
+    <optgroup label="{{ gender }}">
+      {% for voice in voice_choices %}
+        {% if voice.gender == gender %}
+          <option value="{{ voice.short_name }}" {% if voice.short_name == selected_voice %}selected{% endif %}>
+            {{ voice_display_map|get_item:voice.short_name }}
+          </option>
+        {% endif %}
+      {% endfor %}
+    </optgroup>
+  {% endfor %}
+</select>
+
+
+<form method="post" action="/tts/" id="previewForm">
+  {% csrf_token %}
+  <!-- Hidden voice settings -->
+  <input type="hidden" name="voice" value="{{ selected_voice }}">
+  <input type="hidden" name="style" value="{{ selected_style }}">
+  <input type="hidden" name="rate" value="{{ selected_rate|default:'0' }}">
+  <input type="hidden" name="pitch" value="{{ selected_pitch|default:'0' }}">
+  <input type="hidden" name="volume" value="{{ selected_volume|default:'100' }}">
+
+  <button type="button" class="btn btn-secondary w-100 mt-3" onclick="previewAudio()">🔊 Preview Voice</button>
+
+</form>
+<div id="toast-container" style="
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+">
+</div>
+
+
+<button type="button" class="btn btn-outline-success w-100 mt-2" onclick="saveFavorite()">
+  ⭐ Save to Favorites
+</button>
+<div id="favoriteMessage" style="display:none;" class="alert alert-success" role="alert">
+  ✅ Favorite saved!
+</div>
+<div id="favoriteDeleteMessage" class="alert alert-danger" style="display: none;">
+  🗑️ Deleted from favorites!
+</div>
+
+<div id="favoriteStatus" class="text-success small mt-1"></div>
+
+<div class="mt-3" style="max-height: 280px; overflow-y: auto;">
+  <label class="form-label mb-2">🎵 Favorites</label>
+  <div id="favoriteList">
+    {% for fav in favorite_list %}
+      {% with full_name=voice_display_map|get_item:fav.voice|default:fav.voice %}
+      <div class="d-flex align-items-center justify-content-between border rounded bg-light favorite-item mt-2 p-2" title="{{ full_name }}">
+  <div class="favorite-text" title="{{ full_name }}">
+    {{ full_name }}
+  </div>
+  <div class="ms-2 d-flex">
+    <button class="btn btn-outline-secondary btn-sm me-1" title="Use Voice" onclick="useFavorite('{{ fav.voice }}', '{{ fav.style }}')">
+      🎤
+    </button>
+    <button class="btn btn-outline-primary btn-sm me-1" title="Play Preview" onclick="playPreview('{{ fav.voice }}', '{{ fav.style }}', this)">
+      ▶️
+    </button>
+    <button class="btn btn-outline-danger btn-sm" title="Delete Favorite" onclick="confirmDeleteFavorite('{{ fav.voice }}')">
+      🗑️
+    </button>
+  </div>
+</div>
+
+      {% endwith %}
+    {% endfor %}
+  </div>
+</div>
+
+
+
+<div id="previewPlayer" class="mt-4" style="display: none;">
+  <h5>🎧 Voice Preview</h5>
+  <audio controls autoplay>
+    <source id="previewSource" src="" type="audio/mpeg">
+    Your browser does not support the audio element.
+  </audio>
+</div>
+
+    
+    <!-- Style Dropdown -->
+    <div class="mt-3">
+      <label class="form-label">Speaking Style</label>
+      <select class="form-select" name="style" form="ttsForm">
+        <option value="">-- None --</option>
+       {% for s in style_choices %}
+          <option value="{{ s }}" {% if s == selected_style %}selected{% endif %}>{{ s|title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Sliders -->
+    <div class="mt-3">
+      <label class="form-label">Speed</label>
+      <!-- <input type="range" class="form-range" name="rate" form="ttsForm" min="-50" max="50" value="{{ selected_rate|default:'0' }}" oninput="rateOutput.value = this.value + '%'"> -->
+      <!-- <input type="range" class="form-range" name="rate" form="ttsForm" min="-100" max="200" step="1" value="{{ selected_rate|default:'0'|cut:'%' }}" oninput="rateOutput.value = this.value + '%'"> -->
+      <!-- <output id="rateOutput">{{ selected_rate|default:'0%' }}</output>-->
+       <input type="range" class="form-range" name="rate" form="ttsForm"
+       min="-100" max="200" step="1"
+       value="{{ selected_rate|default:'0' }}"
+       oninput="rateOutput.value = this.value + '%'">
+<output id="rateOutput">{{ selected_rate|default:'0' }}%</output>
+
+    </div>
+
+    <div class="mt-3">
+      <label class="form-label">Pitch</label>
+      <input type="range" class="form-range" name="pitch" min="-50" max="50" form="ttsForm" value="{{ selected_pitch|default:'0' }}" oninput="pitchOutput.value = this.value + '%'">
+      <output id="pitchOutput">{{ selected_pitch|default:'0%' }}</output>
+    </div>
+
+    <div class="mt-3">
+      <label class="form-label">Volume</label>
+      <input type="range" class="form-range" name="volume" form="ttsForm"  min="0" max="200" value="{{ selected_volume|default:'100' }}" oninput="volumeOutput.value = this.value + '%'">
+      <output id="volumeOutput">{{ selected_volume|default:'100%' }}</output>
+    </div>
+   
+  </form>
+</div>
+ <div class="mt-3">   
+<button class="btn btn-warning w-100 mt-3" onclick="showResetConfirmModal()">
+  ♻️ Reset Voice Settings
+</button>
+ </div>
+{% endblock %}
+
+{% block content %}
+
+<!-- 🗑️ Delete Confirmation Modal -->
+<div class="modal fade" id="deleteFavoriteModal" tabindex="-1" aria-labelledby="deleteFavoriteLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete Favorite?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to remove this voice from favorites?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-danger" id="confirmDeleteBtn">Yes, Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+ <form method="POST" id="ttsForm" class="mt-4">
+  {% csrf_token %}
+ 
+ <div id="loader" style="display: none; text-align: center; margin-top: 15px;">
+  <div class="spinner-border text-primary" role="status">
+    <span class="visually-hidden">Loading...</span>
+  </div>
+</div>
+
+ 
+  <span id="voiceBadge" class="badge bg-secondary mb-3"> 🔮 {{ selected_voice }} </span>
+  <input type="hidden" name="page_id" value="{{ selected_page_id }}">
+  <textarea name="text" rows="5" class="form-control mb-3" placeholder="Type something...">Surround yourself with positive influences and people who encourage your progress.</textarea>
+ 
+
+  <div class="d-flex flex-wrap gap-2">
+    <!-- <button class="btn btn-dark" type="submit" name="generate" {% if not is_authenticated %}disabled{% endif %}> Generate Speech</button> -->
+     <button id="generateBtn" class="btn btn-dark d-flex align-items-center justify-content-center gap-2" type="button" onclick="submitTTS()" {% if not is_authenticated %}disabled{% endif %}>
+  <span id="btnText">Generate Speech</span>
+  <div id="btnSpinner" class="spinner-border spinner-border-sm text-light" role="status" style="display: none;"></div>
+</button>
+
+    <button type="button" class="btn btn-outline-primary btn-sm" onclick="pasteCopiedText()">📌 Paste Copied Text</button>
+    <!-- <button class="btn btn-outline-secondary" type="button">Enhance (alpha)</button> -->
+  </div>
+</form>
+
+{% if not is_authenticated %}
+  <div class="alert alert-warning" style="margin-top: 20px;">
+    ⚠️ Please <a href="/auth/login/google-oauth2/?next=/tts/">log in</a> to generate speech.
+  </div>
+{% endif %}
+
+
+
+  {% if audio_url %}
+    <div class="mt-4">
+      <h5>🔊 Latest Audio Output:</h5>
+      <audio controls>
+        <source src="{{ audio_url }}" type="audio/mpeg" />
+        Your browser does not support the audio element.
+      </audio>
+    </div>
+  {% endif %}{% if audio_list %}
+  <div class="mt-3">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5>📁 Previous Audio Files</h5>
+      <form method="get" class="d-inline">
+        <select name="page" onchange="this.form.submit()" class="form-select form-select-sm w-auto d-inline-block">
+          {% for page in pages %}
+            <option value="{{ page.id }}" {% if page.id == selected_page_id %}selected{% endif %}>{{ page.name }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    </div>
+    <ul class="list-group mt-3">
+      {% for audio in audio_list %}
+        <li class="list-group-item d-flex justify-content-between align-items-start flex-column">
+          <div class="w-100">
+            <strong>{{ audio.index }}.</strong>
+            <audio controls class="w-100" {% if forloop.first %}id="latestAudio"{% endif %}>
+              <source src="{{ audio.url }}" type="audio/mpeg">
+              Your browser does not support the audio element.
+            </audio>
+
+            <div class="d-flex justify-content-between align-items-center w-100">
+              <p class="text-muted small mb-1 mb-0 me-2 flex-grow-1" id="audioText_{{ audio.id }}">
+                {{ audio.text }}
+              </p>
+            </div>
+
+            <p class="text-muted small">🕒 {{ audio.created_at }}</p>
+            <div class="text-muted small">
+              🎤 <strong>Voice:</strong> {{ audio.voice }} |
+              🗣 <strong>Style:</strong> {{ audio.style|default:"N/A" }} |
+              ⚙️ <strong>Speed:</strong> {{ audio.rate }} |
+              <strong>Pitch:</strong> {{ audio.pitch }} |
+              <strong>Volume:</strong> {{ audio.volume }}
+            </div>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            <a href="{{ audio.url }}" download class="btn btn-sm btn-outline-primary" title="Download Audio">⬇️</a>
+
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyAudioText('{{ audio.id }}')" title="Copy Text">📋</button>
+
+            <button class="btn btn-sm btn-outline-dark" onclick="copyAudioUrl('{{ audio.url }}')" title="Copy Short URL">🔗</button>
+
+            <button class="btn btn-sm btn-outline-success" onclick="showShareModal('{{ audio.url }}')" title="Share Audio">📤</button>
+
+           <!-- Trigger modal -->
+            <button type="button" class="btn btn-sm btn-danger" title="Delete Audio" onclick="confirmDelete('{{ audio.id }}')">🗑</button>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Modal for sharing -->
+  <div class="modal fade" id="shareModal" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="shareModalLabel">Share Audio</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="text" class="form-control" id="shareUrlInput" readonly>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-primary" onclick="copyShareUrl()">📋 Copy</button>
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <p class="text-muted">No audio files yet for this page.</p>
+{% endif %}
+
+
+
+
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const editButtons = document.querySelectorAll(".btn-edit");
+    editButtons.forEach(button => {
+      button.addEventListener("click", function () {
+        const id = this.getAttribute("data-id");
+        const form = document.getElementById(`renameForm_${id}`);
+        const nameSpan = document.getElementById(`pageName_${id}`);
+        if (form && nameSpan) {
+          form.classList.remove("d-none");
+          nameSpan.parentElement.classList.add("d-none");
+        }
+      });
+    });
+  });
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const voiceSelect = document.getElementById("voice");
+    const badge = document.getElementById("voiceBadge");
+
+    if (voiceSelect && badge) {
+      const updateBadge = () => {
+        const selectedOption = voiceSelect.options[voiceSelect.selectedIndex];
+        badge.textContent = "🔮 " + selectedOption.textContent;
+      };
+
+      // Update badge on page load in case a voice is preselected
+      updateBadge();
+
+      // Update on change
+      voiceSelect.addEventListener("change", updateBadge);
+    }
+  });
+</script>
+
+
+
+<script>
+  $(document).ready(function() {
+    $('#voice').select2({
+      width: '100%',
+      templateResult: formatOption,
+      templateSelection: formatOption
+    });
+
+    function formatOption (state) {
+      if (!state.id) return state.text;
+      return $('<span>' + state.text + '</span>');
+    }
+  });
+</script>
+<script>
+function previewAudio() {
+    const form = document.getElementById('ttsForm');
+    const formData = new FormData(form);
+    formData.append('preview', '1');  // important to trigger the correct logic in Django view
+
+        // 🔄 Show loader
+    document.getElementById("loader").style.display = "block";
+
+    fetch("{% url 'tts' %}", {
+        method: "POST",
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': '{{ csrf_token }}',
+        },
+        body: formData,
+    })
+    .then(response => response.json())
+    .then(data => {
+       document.getElementById("loader").style.display = "none"; // ✅ Hide loader
+        if (data.audio_preview_url) {
+            document.getElementById("previewSource").src = data.audio_preview_url;
+            const audioPlayer = document.getElementById("previewPlayer");
+            audioPlayer.style.display = "block";
+            audioPlayer.querySelector("audio").load();
+        } else {
+            alert("⚠️ Preview generation failed.");
+        }
+    })
+    .catch(error => {
+        console.error("Preview error:", error);
+        alert("⚠️ Could not preview audio.");
+    });
+}
+</script>
+<script>
+function saveFavorite() {
+  const voice = document.getElementById("voice").value;
+
+  fetch("/save_favorite/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken"),
+    },
+    body: JSON.stringify({ voice }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      showTempMessage("✅ Favorite saved!");
+      refreshFavoriteList();  // 🧠 Refresh immediately
+    }
+  })
+  .catch(err => console.error("Error saving favorite", err));
+}
+
+function showTempMessage(msg) {
+  const el = document.getElementById("favoriteMessage");
+  el.textContent = msg;
+  el.style.display = "block";
+  setTimeout(() => {
+    el.style.display = "none";
+  }, 3000);
+}
+
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== "") {
+        const cookies = document.cookie.split(";");
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === name + "=") {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+
+
+<script>
+function applyFavorite(select) {
+    const value = selectEl.value;
+    if (!value) return;
+
+    const [voice, style] = value.split("|");
+    document.querySelector('select[name="voice"]').value = voice;
+    document.querySelector('select[name="style"]').value = style || "";
+
+
+    const styleSelect = document.querySelector('select[name="style"]');
+    if (styleSelect && style) {
+        styleSelect.value = style;
+    }
+}
+</script>
+<script>
+  function applyFavoriteVoice(voiceShortName) {
+    const voiceSelect = document.getElementById("voice");
+    if (voiceSelect) {
+      voiceSelect.value = voiceShortName;
+    }
+
+    // Optional: Update badge
+    const badge = document.getElementById("voiceBadge");
+    if (badge) {
+      badge.textContent = voiceShortName;
+    }
+
+    // Optional: Auto-preview
+    // previewAudio();
+  }
+</script>
+
+<script>
+function useFavorite(voice) {
+  const voiceSelect = document.getElementById("voice");
+  const voiceBadge = document.getElementById("voiceBadge");
+  if (voiceSelect) {
+    voiceSelect.value = voice;
+    if (voiceBadge) {
+      voiceBadge.textContent = voice;
+    }
+  }
+}
+
+
+
+
+function deleteFavorite(voice) {
+  fetch("/delete_favorite/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken"),
+    },
+    body: JSON.stringify({ voice }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      showTempMessage("🗑️ Deleted from favorites!");
+      refreshFavoriteList();  // 🧠 Refresh favorites UI
+    }
+  })
+  .catch(err => console.error("Delete failed", err));
+}
+
+function refreshFavoriteList() {
+  console.log("🔄 refreshFavoriteList() called");
+
+  fetch("/get_favorites/")
+    .then(response => response.json())
+    .then(data => {
+      const container = document.getElementById("favoriteList");
+      container.innerHTML = "";
+
+      data.favorites.forEach(fav => {
+        const fullName = data.voice_display_map[fav.voice] || fav.voice;
+        const style = fav.style || "";
+
+        const item = document.createElement("div");
+        item.className = "d-flex align-items-center justify-content-between border rounded bg-light favorite-item mt-2 p-2";
+        item.title = fullName;
+
+        item.innerHTML = `
+          <div class="favorite-text" title="${fullName}">${fullName}</div>
+          <div class="ms-2 d-flex">
+            <button class="btn btn-outline-secondary btn-sm me-1" title="Use Voice" onclick="useFavorite('${fav.voice}', '${style}')">🎤</button>
+            <button class="btn btn-outline-primary btn-sm me-1" title="Play Preview" onclick="playPreview('${fav.voice}', '${style}', this)">▶️</button>
+            <button class="btn btn-outline-danger btn-sm" title="Delete Favorite" onclick="confirmDeleteFavorite('${fav.voice}')">🗑️</button>
+          </div>
+        `;
+
+        container.appendChild(item);
+      });
+    })
+    .catch(error => {
+      console.error("❌ Failed to refresh favorites:", error);
+    });
+}
+
+
+function playPreview(voice, style) {
+  const formData = new FormData();
+  formData.append("text", "This is a sample voice preview.");
+  formData.append("voice", voice);
+  formData.append("style", style);
+  formData.append("rate", 0);
+  formData.append("pitch", 0);
+  formData.append("preview", "1");
+
+  const loader = document.getElementById("loader");
+  const previewPlayer = document.getElementById("previewPlayer");
+  const previewSource = document.getElementById("previewSource");
+  const audio = previewPlayer.querySelector("audio");
+
+  fetch("{% url 'text_to_speech' %}", {
+    method: "POST",
+    headers: {
+      'X-CSRFToken': '{{ csrf_token }}',
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    body: formData
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.audio_preview_url) {
+        previewSource.src = data.audio_preview_url;
+        previewPlayer.style.display = "block";
+        audio.load();
+
+        setTimeout(() => {
+          audio.play().catch(err => {
+            console.warn("🔇 Autoplay blocked:", err);
+            showToast("🔇 Auto-play was blocked. Tap play to listen.");
+          });
+        }, 300);
+      } else {
+        showToast("❌ Preview generation failed.");
+      }
+    })
+    .catch(error => {
+      loader.style.display = "none";
+      console.error("❌ Preview fetch error:", error);
+      showToast("⚠️ Could not generate preview.");
+    });
+}
+
+</script>
+
+
+
+
+</script><script>
+   let voiceToDelete = null;
+
+  function confirmDeleteFavorite(voice) {
+    voiceToDelete = voice;
+
+    // Optional: update modal content with voice name
+    document.querySelector('#deleteFavoriteModal .modal-body').textContent =
+      `Are you sure you want to delete "${voice}" from favorites?`;
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('deleteFavoriteModal'));
+    modal.show();
+  }
+
+  document.getElementById("confirmDeleteBtn").addEventListener("click", function () {
+       
+    if (!voiceToDelete) return;
+
+    fetch("/delete_favorite/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCookie("csrftoken")
+      },
+      body: JSON.stringify({ voice: voiceToDelete })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {      
+        // ✅ Hide modal
+        const modalElement = document.getElementById('deleteFavoriteModal');
+        const modalInstance = bootstrap.Modal.getInstance(modalElement);
+        if (modalInstance) modalInstance.hide();
+
+        voiceToDelete = null;
+
+        // ✅ Show success message
+        showTempMessage("🗑️ Deleted from favorites!");
+
+        // ✅ Refresh list
+        refreshFavoriteList();
+      }
+    });
+  });
+</script>
+<script>
+  let copiedText = "";
+
+  function copyAudioText(audioId) {
+    const element = document.getElementById("audioText_" + audioId);
+    if (element) {
+      copiedText = element.textContent.trim();
+      navigator.clipboard.writeText(copiedText)
+        .then(() => {          
+          showToast("✅ Text copied!");
+        })
+        .catch(err => {
+          console.error("Clipboard copy failed:", err);
+          showToast("❌ Failed to copy text.");
+        });
+    }
+  }
+
+  function pasteCopiedText() {    
+    const textarea = document.querySelector('textarea[name="text"]');
+    if (textarea && copiedText) {
+      textarea.value = copiedText;
+      showToast("📌 Text pasted into the input area.");
+    } else {
+      showToast("⚠️ Nothing to paste.");
+    }
+  }
+</script>
+
+<script>
+function submitTTS() {
+    const form = document.getElementById("ttsForm");
+    const button = document.getElementById("generateBtn");
+    const btnText = document.getElementById("btnText");
+    const spinner = document.getElementById("btnSpinner");
+    const loader = document.getElementById("loader");
+
+    // Prepare FormData from form
+    const formData = new FormData(form);
+    formData.append('generate', '1'); // Optional trigger flag
+
+    // Show loading indicators
+    button.disabled = true;
+    spinner.style.display = "inline-block";
+    btnText.textContent = "Generating...";
+    loader.style.display = "block";
+
+    fetch("{% url 'text_to_speech' %}", {
+        method: "POST",
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Hide loading indicators       
+        spinner.style.display = "none";
+        btnText.textContent = "Generate Speech";
+        button.disabled = false;
+        loader.style.display = "none";  
+        
+        if (data.audio_url) {          
+                showToast("✅ Speech generated successfully!", "success");
+               
+                 localStorage.setItem("autoPlayNext", "true");
+                  location.reload();
+        } else {
+            showToast("⚠️ Generation failed: " + (data.error || "Unknown error"));
+        }
+    })
+    .catch(error => {
+        console.error("Error:", error);
+        spinner.style.display = "none";
+        btnText.textContent = "Generate Speech";
+        button.disabled = false;
+        loader.style.display = "none";
+        showToast("❌ Server error during speech generation.");
+    });
+}
+</script>
+
+
+
+<script>
+function showToast(message, type = 'info') {    
+    const toast = document.createElement("div");
+    toast.textContent = message;
+    toast.style.cssText = `
+        padding: 10px 16px;
+        background-color: ${type === 'success' ? '#4caf50' :
+                           type === 'error' ? '#f44336' :
+                           type === 'warning' ? '#ff9800' : '#2196f3'};
+        color: white;
+        border-radius: 6px;
+        font-size: 14px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        animation: fadein 0.5s, fadeout 0.5s 2.5s;
+        opacity: 0;
+    `;
+
+    const container = document.getElementById("toast-container");
+    container.appendChild(toast);
+
+    // Trigger fade-in
+    setTimeout(() => toast.style.opacity = 1, 100);
+
+    // Auto-remove after 3s
+    setTimeout(() => {
+        toast.style.opacity = 0;
+        setTimeout(() => container.removeChild(toast), 500);
+    }, 3000);
+}
+
+
+
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    refreshFavoriteList();
+
+    if (localStorage.getItem("autoPlayNext") === "true") {
+        const latestAudio = document.getElementById("latestAudio");
+        if (latestAudio) {
+            document.querySelectorAll("audio").forEach(el => el.pause());
+            latestAudio.play().catch(err => {
+                console.warn("🔇 Auto-play blocked by browser:", err);
+                showToast("🔇 Auto-play was blocked. Tap play to listen.", "info");
+            });
+            latestAudio.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        localStorage.removeItem("autoPlayNext");
+    }
+  });
+</script>
+
+<script>
+function showResetConfirmModal() {  
+    const modal = new bootstrap.Modal(document.getElementById("resetConfirmModal"));
+    modal.show();
+}
+
+
+
+function resetVoiceSettings() {
+    fetch("/reset_voice_settings/", {
+        method: "POST",
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert("❌ Reset failed. Try again.");
+        }
+    })
+    .catch(error => {
+        console.error("Reset error:", error);
+        alert("❌ Server error during reset.");
+    });
+}
+</script>
+<script>
+let pageToDeleteId = null;
+
+document.addEventListener("DOMContentLoaded", () => {
+  // Show modal on delete click
+  document.querySelectorAll(".btn-delete").forEach(btn => {
+    btn.addEventListener("click", () => {
+      pageToDeleteId = btn.dataset.id;
+      const modal = new bootstrap.Modal(document.getElementById("confirmDeletePageModal"));
+      modal.show();
+    });
+  });
+
+  // Confirm deletion
+  document.getElementById("confirmDeletePageBtn").addEventListener("click", () => {
+    if (!pageToDeleteId) return;
+    
+    fetch("{% url 'delete_page' %}", {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": "{{ csrf_token }}",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: new URLSearchParams({ page_id: pageToDeleteId })
+    })
+    .then(response => response.json())
+    .then(() => location.reload());
+  });
+});
+</script>
+
+
+  <script>
+ 
+
+  function copyAudioUrl(url) {
+    const base = window.location.origin;
+    const fullUrl = base + url;
+    fetch(`/shorten_url/?long_url=${encodeURIComponent(fullUrl)}`)
+      .then(res => res.json())
+      .then(data => {
+        navigator.clipboard.writeText(data.short_url || fullUrl);
+        showToast("🔗 URL copied");
+      });
+  }
+
+  function showShareModal(url) {
+    const base = window.location.origin;
+    const fullUrl = base + url;
+    fetch(`/shorten_url/?long_url=${encodeURIComponent(fullUrl)}`)
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById("shareUrlInput").value = data.short_url || fullUrl;
+        new bootstrap.Modal(document.getElementById('shareModal')).show();
+      });
+  }
+
+  function copyShareUrl() {
+    const input = document.getElementById("shareUrlInput");
+    navigator.clipboard.writeText(input.value);
+    showToast("📋 Share link copied!");
+  }
+  </script>
+
+
+<script>
+  function confirmDelete(audioId) {
+    document.getElementById('deleteAudioId').value = audioId;
+    var deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    deleteModal.show();
+  }
+</script>
+
+{% endblock content %}
+

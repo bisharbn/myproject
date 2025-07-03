@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Health Analyzer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body {
+      background-color: #fffcf2;
+      color: #403d39;
+    }
+
+    header, footer {
+      background-color: #252422;
+      color: white;
+      padding: 20px 0;
+      text-align: center;
+    }
+
+    .container {
+      max-width: 700px;
+      background-color: #fff;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.05);
+      margin-top: 30px;
+    }
+
+    .btn-primary {
+      background-color: #eb5e28;
+      border: none;
+    }
+
+    .btn-primary:hover {
+      background-color: #403d39;
+    }
+
+    .btn-outline-secondary, .btn-outline-info, .btn-outline-primary, .btn-outline-success {
+      border-color: #ccc5b9;
+      color: #403d39;
+    }
+
+    .btn-outline-secondary:hover,
+    .btn-outline-info:hover,
+    .btn-outline-primary:hover,
+    .btn-outline-success:hover {
+      background-color: #eb5e28;
+      color: #fff;
+    }
+
+    #previewImage, video, canvas {
+      width: 100%;
+      max-height: 400px;
+      margin-top: 10px;
+      border-radius: 8px;
+    }
+
+    .output-box {
+      background-color: #ccc5b9;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      color: #252422;
+    }
+
+    .output-tools button {
+      margin-right: 10px;
+    }
+#analyzeForm input[type="file"] {
+  border: 1px solid #ccc5b9;
+  background-color: #fffcf2;
+  color: #252422;
+}
+
+
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Linked in Image Enhancer</h1>
+</header>
+
+<div class="container">
+ <form id="analyzeForm" method="POST" action="{% url 'analyze_photo' %}" enctype="multipart/form-data" class="mt-4">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label for="photo" class="form-label"><strong>Upload Your Face Photo</strong></label>
+    <input type="file" name="photo" id="uploadInput" accept="image/*" class="form-control" required>
+    <img id="previewImage" hidden class="img-fluid rounded mt-2" />
+    <small class="form-text text-muted">Clear face image recommended for best results.</small>
+  </div>
+
+  <div class="text-center my-3">— or —</div>
+
+  <div class="mb-3 text-center">
+    <button type="button" class="btn btn-outline-secondary" onclick="startCamera()">📷 Take a Photo</button>
+    <video id="camera" autoplay playsinline hidden></video>
+    <canvas id="snapshot" hidden></canvas>
+    <button type="button" class="btn btn-danger mt-2" onclick="capturePhoto()" id="captureBtn" hidden>📸 Capture</button>
+  </div>
+
+  <div class="text-center mt-4">
+    <button type="submit" class="btn btn-primary px-4 py-2">LinkedIn-Style Enhanced </button>
+  </div>
+</form>
+{% if uploaded_image %}
+  <h5 class="mt-4">📤 Original Image:</h5>
+  <img src="{{ uploaded_image }}" class="img-fluid rounded mb-3" />
+{% endif %}
+
+{% if enhanced_image %}
+  <h5 class="mt-4">LinkedIn Style Image:</h5>
+  <img src="{{ enhanced_image }}" id="finalImage" class="img-fluid rounded shadow mb-3" />
+
+  <div class="btn-group mb-4" role="group">
+    <a href="{{ enhanced_image }}" download class="btn btn-outline-success">📥 Download</a>
+    <button onclick="copyImage()" class="btn btn-outline-primary">📋 Copy Image</button>
+
+  </div>
+{% endif %}
+
+
+{% if analysis_result %}
+  <div class="output-box mt-3">
+    <h5>🩺 Result:</h5>
+    <p id="outputText">{{ analysis_result }}</p>
+    <div class="output-tools mt-3">
+      <button class="btn btn-outline-success" onclick="copyToClipboard()">📋 Copy</button>
+      <button class="btn btn-outline-primary" onclick="downloadAsPDF()">📄 Download PDF</button>
+      <button class="btn btn-outline-info" onclick="shareResult()">📤 Share</button>
+    </div>
+  </div>
+{% endif %}
+
+
+
+<footer class="mt-5">
+  <p>&copy; 2025 Meltice Technology. All rights reserved.</p>
+</footer>
+
+<!-- JS Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+  const uploadInput = document.getElementById("uploadInput");
+  const previewImage = document.getElementById("previewImage");
+  const video = document.getElementById("camera");
+  const canvas = document.getElementById("snapshot");
+  const captureBtn = document.getElementById("captureBtn");
+  const analysisResult = document.getElementById("analysisResult");
+  const outputText = document.getElementById("outputText");
+
+  uploadInput.addEventListener("change", function () {
+    const file = this.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        previewImage.src = e.target.result;
+        previewImage.hidden = false;
+        video.hidden = true;
+        canvas.hidden = true;
+        captureBtn.hidden = true;
+        analysisResult.style.display = "none";
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+
+  function startCamera() {
+    navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+      video.srcObject = stream;
+      video.hidden = false;
+      captureBtn.hidden = false;
+      previewImage.hidden = true;
+      canvas.hidden = true;
+      analysisResult.style.display = "none";
+    }).catch(() => {
+      alert("Camera access denied or not available.");
+    });
+  }
+
+  function capturePhoto() {
+    const context = canvas.getContext("2d");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0);
+    canvas.hidden = false;
+    video.hidden = true;
+    captureBtn.hidden = true;
+
+    let stream = video.srcObject;
+    let tracks = stream.getTracks();
+    tracks.forEach(track => track.stop());
+  }
+
+//   document.getElementById("analyzeForm").addEventListener("submit", function (e) {
+//     e.preventDefault();
+//     outputText.innerText = "Analyzing image...";
+//     analysisResult.style.display = "block";
+
+//     setTimeout(() => {
+//       outputText.innerText = "✅ Analysis complete: No critical issues detected. Slight signs of fatigue and dehydration.";
+//     }, 1500);
+//   });
+
+  async function copyImage() {
+    const image = document.getElementById("finalImage");
+    const response = await fetch(image.src);
+    const blob = await response.blob();
+
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob })
+      ]);
+      alert("✅ Image copied to clipboard.");
+    } catch (err) {
+      alert("❌ Copying not supported in this browser.");
+    }
+  }
+
+
+  function copyToClipboard() {
+    navigator.clipboard.writeText(outputText.innerText).then(() => {
+      alert("✅ Copied to clipboard.");
+    });
+  }
+
+  function downloadAsPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.text("Health Analysis Result", 10, 10);
+    doc.text(outputText.innerText, 10, 20);
+    doc.save("health_analysis.pdf");
+  }
+
+  function shareResult() {
+    if (navigator.share) {
+      navigator.share({
+        title: 'Health Analysis Result',
+        text: outputText.innerText,
+      }).catch(() => {
+        alert("❌ Sharing cancelled or not supported.");
+      });
+    } else {
+      alert("🔁 Sharing not supported on this device.");
+    }
+  }
+</script>
+
+</body>
+</html>

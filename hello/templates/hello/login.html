@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login Page</title>
+</head>
+<body>
+
+    {% if request.user.is_authenticated %}
+    <p>Welcome back, {{ request.user.first_name }}!</p>
+    <a href="{% url 'dashboard' %}">Go to Dashboard</a>
+{% else %}
+    <a href="{% url 'social:begin' 'google-oauth2' %}">Login with Google</a>
+{% endif %}
+
+
+
+    <h2>Welcome! Please log in</h2>
+    <a href="{% url 'social:begin' 'google-oauth2' %}?next=/dashboard/">Login with Google</a>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard</title>
+</head>
+<body>
+    <h1>Welcome, {{ request.user.first_name }}!</h1>
+
+    {% if profile %}
+        <p><strong>Email:</strong> {{ profile.email }}</p>
+        <img src="{{ profile.profile_pic }}" alt="Profile Photo" width="150" style="border-radius: 50%;">
+    {% else %}
+        <p>Profile not found.</p>
+    {% endif %}
+
+    <br>
+    <a href="{% url 'logout' %}">Logout</a>
+</body>
+</html>

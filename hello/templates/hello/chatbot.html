@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ChatBot</title>
+    {% load static %}
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f2f5f9;
+            margin: 0;
+            padding: 0;
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background-color: #007B8A;
+            color: white;
+            padding: 12px;
+            text-align: center;
+            font-size: 18px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .chat-container {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            background-color: #f9fcff;
+        }
+
+        .chat-message {
+            max-width: 75%;
+            padding: 12px 15px;
+            margin: 8px;
+            border-radius: 15px;
+            position: relative;
+            word-wrap: break-word;
+            white-space: normal;
+            line-height: 1.5;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .user {
+            align-self: flex-end;
+            background-color: #d1ecf1;
+            color: #055160;
+            border-bottom-right-radius: 0;
+        }
+
+        .bot {
+            align-self: flex-start;
+            background-color: #ffffff;
+            color: #333;
+            border-bottom-left-radius: 0;
+        }
+
+        .sender-label {
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .timestamp {
+            font-size: 10px;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            background: transparent;
+            border: none;
+            font-size: 12px;
+            color: #999;
+            cursor: pointer;
+            display: none;
+        }
+
+        .chat-message:hover .copy-btn {
+            display: block;
+        }
+
+        .copy-btn:hover {
+            color: #333;
+        }
+
+        .input-area {
+            display: flex;
+            padding: 10px;
+            background-color: #fff;
+            border-top: 1px solid #ccc;
+        }
+
+        .input-area input {
+            flex: 1;
+            padding: 10px;
+            font-size: 13px;
+            border-radius: 5px;
+            border: 1px solid #aaa;
+            margin-right: 10px;
+        }
+
+        .input-area button {
+            padding: 10px 15px;
+            font-size: 13px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007B8A;
+            color: white;
+            cursor: pointer;
+        }
+
+        .input-area button:hover {
+            background-color: #005f6b;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #333;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 13px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            z-index: 999;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+        .delete-btn {
+    position: absolute;
+    top: 8px;
+    right: 38px;
+    background: transparent;
+    border: none;
+    font-size: 12px;
+    color: #999;
+    cursor: pointer;
+    display: none;
+}
+.chat-message:hover .delete-btn {
+    display: block;
+}
+.delete-btn:hover {
+    color: red;
+}
+
+    </style>
+
+    <!-- Markdown support -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+<header>🤖 Chat with ChatGPT</header>
+
+<div class="chat-container" id="chatContainer">
+    {% for msg in messages %}
+       <div class="chat-message {{ msg.sender }}">
+    <div class="sender-label">{{ msg.sender|title }}</div>
+    <div class="msg-text">{{ msg.message|safe }}</div>
+    <div class="timestamp">{{ msg.timestamp|date:"H:i" }}</div>
+    <button class="copy-btn" onclick="copyToClipboard(this)">📋</button>
+    <button class="delete-btn" onclick="deleteMessage(this)" data-id="{{ msg.id }}">🗑</button>
+</div>
+    {% endfor %}
+</div>
+
+<div class="input-area">
+    <input type="text" id="userInput" placeholder="Type your message..." autocomplete="off" />
+    <button onclick="sendMessage()">Send</button>
+</div>
+
+<div class="toast" id="toast">Copied to clipboard!</div>
+
+<script>
+    const csrftoken = '{{ csrf_token }}';
+
+    let messageHistory = [];
+    let historyIndex = -1;
+
+    window.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.msg-text').forEach(el => {
+            const raw = el.getAttribute('data-raw');
+            if (raw) {
+                el.innerHTML = marked.parse(raw);
+            }
+        });
+    });
+
+    document.getElementById("userInput").addEventListener("keydown", function (e) {
+        if (e.key === "ArrowUp") {
+            if (historyIndex > 0) {
+                historyIndex--;
+                this.value = messageHistory[historyIndex];
+            }
+            e.preventDefault();
+        } else if (e.key === "ArrowDown") {
+            if (historyIndex < messageHistory.length - 1) {
+                historyIndex++;
+                this.value = messageHistory[historyIndex];
+            } else {
+                this.value = '';
+                historyIndex = messageHistory.length;
+            }
+            e.preventDefault();
+        }
+    });
+
+    async function sendMessage() {       
+        const input = document.getElementById("userInput");
+        const message = input.value.trim();
+        if (!message) return;
+
+        messageHistory.push(message);
+        historyIndex = messageHistory.length;
+
+        appendMessage("You", message, "user");
+        input.value = "";
+
+        try {
+            const response = await fetch("/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken
+                },
+                body: JSON.stringify({ message })
+            });
+
+            const data = await response.json();
+            appendMessage("Bot", data.reply || "No response received", "bot");
+        } catch (err) {
+            appendMessage("Bot", "Error: " + err.message, "bot");
+        }
+    }
+
+    function appendMessage(sender, text, type) {
+        const container = document.getElementById("chatContainer");
+        const msgDiv = document.createElement("div");
+        msgDiv.className = `chat-message ${type}`;
+
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        msgDiv.innerHTML = `
+            <div class="sender-label">${sender}</div>
+            <div class="msg-text">${marked.parse(text)}</div>
+            <div class="timestamp">${timestamp}</div>
+            <button class="copy-btn" onclick="copyToClipboard(this)">📋</button>
+            <button class="delete-btn" onclick="deleteMessage(this)" data-id="{{ msg.id }}">🗑</button>
+        `;
+
+        container.appendChild(msgDiv);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function copyToClipboard(btn) {
+        const text = btn.parentElement.querySelector('.msg-text').textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            showToast("Copied to clipboard!");
+        }).catch(() => {
+            showToast("Failed to copy!");
+        });
+    }
+
+    function showToast(msg) {
+        const toast = document.getElementById("toast");
+        toast.textContent = msg;
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 2000);
+    }
+
+    function deleteMessage(btn) {
+    const messageDiv = btn.closest('.chat-message');
+    const messageId = btn.dataset.id;
+
+    if (!messageId) {
+        alert("Cannot delete: message ID missing.");
+        return;
+    }
+
+    fetch(`/chat/delete/${messageId}/`, {
+        method: 'DELETE',
+        headers: {
+            "X-CSRFToken": csrftoken
+        }
+    })
+    .then(response => {
+        if (response.ok) {
+            messageDiv.remove();
+            showToast("Message deleted.");
+        } else {
+            showToast("Failed to delete.");
+        }
+    });
+}
+
+    
+</script>
+
+</body>
+</html>

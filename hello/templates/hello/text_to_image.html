@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Text to Image Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f9ff;
+            padding: 30px;
+            text-align: center;
+        }
+        input[type=text] {
+            width: 60%;
+            padding: 10px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007B8A;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        img {
+            margin-top: 20px;
+            max-width: 80%;
+            border: 2px solid #ccc;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h2>🖼️ Text to Image Generator</h2>
+ <form id="imageForm">
+    <input type="text" id="promptInput" placeholder="Enter a scene to generate..." required>
+    <button type="submit">Generate Image</button>
+</form>
+<div id="imageContainer" style="margin-top:20px;"></div>
+
+{% if image_url %}
+    {% if "http" in image_url %}
+        <img src="{{ image_url }}" alt="Generated Image" style="max-width:100%; border-radius:10px;">
+    {% else %}
+        <p style="color:red;">{{ image_url }}</p>
+    {% endif %}
+{% endif %}
+
+
+    <script>
+document.getElementById("imageForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const prompt = document.getElementById("promptInput").value;
+
+    const response = await fetch("/text_to_image/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": "{{ csrf_token }}"
+        },
+        body: JSON.stringify({ prompt: prompt })
+    });
+
+    const data = await response.json();
+
+    const imageContainer = document.getElementById("imageContainer");
+    if (data.image_url) {
+        imageContainer.innerHTML = `<img src="${data.image_url}" alt="Generated Image" style="max-width: 100%; border-radius: 10px;">`;
+    } else {
+        imageContainer.innerHTML = `<p style="color:red;">${data.error}</p>`;
+    }
+});
+</script>
+
+</body>
+</html>
